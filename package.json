@@ -9,9 +9,9 @@
     "dev:renderer": "vite",
     "dev:electron": "wait-on http://localhost:5173 && electron .",
     "build": "vite build",
-    "build:win": "electron-builder --win",
-    "build:mac": "electron-builder --mac",
-    "build:linux": "electron-builder --linux"
+    "build:win": "npm run build && electron-builder --win",
+    "build:mac": "npm run build && electron-builder --mac",
+    "build:linux": "npm run build && electron-builder --linux"
   },
   "keywords": [
     "electron",
@@ -47,16 +47,19 @@
       "package.json"
     ],
     "win": {
+      "icon": "src/images/adb_logo.png",
       "target": [
         "nsis"
       ]
     },
     "mac": {
+      "icon": "src/images/adb_logo.png",
       "target": [
         "dmg"
       ]
     },
     "linux": {
+      "icon": "src/images/adb_logo.png",
       "target": [
         "AppImage"
       ]

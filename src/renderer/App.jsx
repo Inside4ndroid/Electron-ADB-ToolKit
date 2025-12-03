@@ -10,9 +10,27 @@ function App() {
   const [loadingApps, setLoadingApps] = useState(false);
   const [isDarkTheme, setIsDarkTheme] = useState(true);
   const [showHelpDialog, setShowHelpDialog] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(null);
 
   useEffect(() => {
     checkSDKStatus();
+    
+    // Listen for SDK download progress
+    window.electronAPI.onSDKDownloadProgress((progress) => {
+      setDownloadProgress(progress);
+      
+      // If download is complete, refresh SDK status
+      if (progress.status === 'complete') {
+        setTimeout(() => {
+          setDownloadProgress(null);
+          checkSDKStatus();
+        }, 1500);
+      } else if (progress.status === 'error') {
+        setTimeout(() => {
+          setDownloadProgress(null);
+        }, 3000);
+      }
+    });
 
     // Listen for device connection/disconnection changes
     window.electronAPI.onDevicesChanged((data) => {
@@ -50,6 +68,18 @@ function App() {
       }
     } catch (error) {
       setSdkStatus({ exists: false, upToDate: false, error: error.message });
+    }
+  };
+
+  const handleDownloadSDK = async () => {
+    setDownloadProgress({ status: 'starting', percent: 0, message: 'Initializing download...' });
+    try {
+      const result = await window.electronAPI.downloadSDK();
+      if (!result.success) {
+        setDownloadProgress({ status: 'error', percent: 0, message: result.error || 'Download failed' });
+      }
+    } catch (error) {
+      setDownloadProgress({ status: 'error', percent: 0, message: error.message });
     }
   };
 
@@ -195,9 +225,12 @@ function App() {
     <div className="app">
       <div className="header">
         <div className="header-content">
-          <div className="header-text">
-            <h1>⚡ Electron ADB Toolkit</h1>
-            <p>Android Debug Bridge device management and tools</p>
+          <div className="header-left">
+            <img src="/adb_logo.png" alt="ADB Toolkit Logo" className="app-logo" />
+            <div className="header-text">
+              <h1>Electron ADB Toolkit</h1>
+              <p>Android Debug Bridge device management and tools</p>
+            </div>
           </div>
           <div className="header-buttons">
             <button 
@@ -278,6 +311,7 @@ function App() {
           sdkStatus={sdkStatus}
           detailedDeviceInfo={detailedDeviceInfo}
           installedApps={installedApps}
+          downloadProgress={downloadProgress}
           onLoadDeviceInfo={loadDetailedDeviceInfo}
           onReboot={handleReboot}
           onScreenshot={handleScreenshot}
@@ -286,6 +320,7 @@ function App() {
           onUninstallApp={handleUninstallApp}
           onClearAppData={handleClearAppData}
           onForceStopApp={handleForceStopApp}
+          onDownloadSDK={handleDownloadSDK}
         />
       </div>
     </div>

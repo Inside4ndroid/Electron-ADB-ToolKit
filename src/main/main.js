@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeImage } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const sdkManager = require('./sdk-manager');
@@ -10,10 +10,14 @@ let deviceMonitorInterval = null;
 let lastDeviceList = [];
 
 function createWindow() {
+  const iconPath = path.join(__dirname, '../images/adb_logo.png');
+  const icon = nativeImage.createFromPath(iconPath);
+  
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     backgroundColor: '#1a1a1a',
+    icon: icon,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-function ToolsTab({ devices, selectedDevice, sdkStatus, detailedDeviceInfo, installedApps, onLoadDeviceInfo, onReboot, onScreenshot, onLoadApps, onInstallApp, onUninstallApp, onClearAppData, onForceStopApp }) {
+function ToolsTab({ devices, selectedDevice, sdkStatus, detailedDeviceInfo, installedApps, downloadProgress, onLoadDeviceInfo, onReboot, onScreenshot, onLoadApps, onInstallApp, onUninstallApp, onClearAppData, onForceStopApp, onDownloadSDK }) {
   const [activeToolSection, setActiveToolSection] = useState('home');
   const [shellCommand, setShellCommand] = useState('');
   const [shellHistory, setShellHistory] = useState([]);
@@ -609,9 +609,38 @@ function ToolsTab({ devices, selectedDevice, sdkStatus, detailedDeviceInfo, inst
         ) : (
           <div className="sdk-status-warning">
             <span className="status-icon">⚠️</span>
-            <div>
+            <div className="sdk-status-content">
               <p className="status-title">SDK Not Found</p>
-              <p className="status-detail">Please go to the Home tab to download Android SDK Platform Tools</p>
+              <p className="status-detail">
+                Android SDK Platform Tools are required to use this application.
+              </p>
+              {downloadProgress ? (
+                downloadProgress.status === 'error' ? (
+                  <span className="download-error">❌ {downloadProgress.message}</span>
+                ) : downloadProgress.status === 'complete' ? (
+                  <span className="download-complete">✅ Download complete! Verifying...</span>
+                ) : (
+                  <div className="download-progress">
+                    <div className="progress-info">
+                      <span className="progress-message">{downloadProgress.message}</span>
+                      <span className="progress-percent">{downloadProgress.percent}%</span>
+                    </div>
+                    <div className="progress-bar">
+                      <div 
+                        className="progress-fill" 
+                        style={{ width: `${downloadProgress.percent}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )
+              ) : (
+                <button 
+                  className="download-sdk-btn" 
+                  onClick={onDownloadSDK}
+                >
+                  📥 Download Android SDK
+                </button>
+              )}
             </div>
           </div>
         )}
