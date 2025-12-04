@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ToolsTab from './ToolsTab';
+import logoImage from '../images/adb_logo.png';
 
 function App() {
   const [sdkStatus, setSdkStatus] = useState({ checking: true });
@@ -221,12 +222,18 @@ function App() {
     setShowHelpDialog(!showHelpDialog);
   };
 
+  const handleQuit = async () => {
+    if (confirm('Are you sure you want to quit? All ADB processes will be stopped.')) {
+      await window.electronAPI.quitApp();
+    }
+  };
+
   return (
     <div className="app">
       <div className="header">
         <div className="header-content">
           <div className="header-left">
-            <img src="/adb_logo.png" alt="ADB Toolkit Logo" className="app-logo" />
+            <img src={logoImage} alt="ADB Toolkit Logo" className="app-logo" />
             <div className="header-text">
               <h1>Electron ADB Toolkit</h1>
               <p>Android Debug Bridge device management and tools</p>
@@ -246,6 +253,13 @@ function App() {
               title={isDarkTheme ? "Switch to Light Theme" : "Switch to Dark Theme"}
             >
               {isDarkTheme ? '☀️' : '🌙'}
+            </button>
+            <button 
+              className="header-icon-btn quit-btn" 
+              onClick={handleQuit}
+              title="Quit Application"
+            >
+              ❌
             </button>
           </div>
         </div>

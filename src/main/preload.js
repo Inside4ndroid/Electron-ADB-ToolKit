@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   connectWirelessIP: (ip, port) => ipcRenderer.invoke('connect-wireless-ip', ip, port),
   disconnectDevice: (deviceId) => ipcRenderer.invoke('disconnect-device', deviceId),
   restartAdbServer: () => ipcRenderer.invoke('restart-adb-server'),
+  quitApp: () => ipcRenderer.invoke('quit-app'),
   onSDKDownloadProgress: (callback) => {
     ipcRenderer.on('sdk-download-progress', (event, progress) => callback(progress));
   },

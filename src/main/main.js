@@ -9,6 +9,48 @@ let logcatProcess = null;
 let deviceMonitorInterval = null;
 let lastDeviceList = [];
 
+// Cleanup function to kill all ADB-related processes
+function cleanupProcesses() {
+  // Kill logcat process if running
+  if (logcatProcess) {
+    try {
+      logcatProcess.kill();
+      logcatProcess = null;
+    } catch (error) {
+      console.error('Error killing logcat process:', error);
+    }
+  }
+
+  // Kill any remaining ADB processes
+  const { exec } = require('child_process');
+  const platform = process.platform;
+  
+  if (platform === 'win32') {
+    exec('taskkill /F /IM adb.exe /T', (error) => {
+      if (error && !error.message.includes('not found')) {
+        console.error('Error killing ADB processes:', error);
+      }
+    });
+  } else {
+    exec('killall adb', (error) => {
+      if (error && !error.message.includes('No matching processes')) {
+        console.error('Error killing ADB processes:', error);
+      }
+    });
+  }
+}
+
+// Helper function to get SDK path (use userData for writable location)
+function getSDKPath() {
+  // In production, use userData directory; in development, use project directory
+  const isDev = !app.isPackaged;
+  if (isDev) {
+    return path.join(app.getAppPath(), 'android-sdk');
+  } else {
+    return path.join(app.getPath('userData'), 'android-sdk');
+  }
+}
+
 function createWindow() {
   const iconPath = path.join(__dirname, '../images/adb_logo.png');
   const icon = nativeImage.createFromPath(iconPath);
@@ -18,12 +60,16 @@ function createWindow() {
     height: 800,
     backgroundColor: '#1a1a1a',
     icon: icon,
+    autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     }
   });
+
+  // Remove the menu bar completely
+  mainWindow.setMenuBarVisibility(false);
 
   // Load the app
   const isDev = !app.isPackaged;
@@ -42,6 +88,8 @@ function createWindow() {
       clearInterval(deviceMonitorInterval);
       deviceMonitorInterval = null;
     }
+    // Clean up any running processes
+    cleanupProcesses();
   });
 
   // Start device monitoring
@@ -54,7 +102,7 @@ function startDeviceMonitoring() {
     if (!mainWindow) return;
 
     try {
-      const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+      const sdkPath = getSDKPath();
       
       // Check if SDK exists first
       const sdkStatus = await sdkManager.checkSDK(sdkPath);
@@ -105,15 +153,30 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  cleanupProcesses();
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
+app.on('before-quit', () => {
+  cleanupProcesses();
+});
+
 // IPC Handlers
+ipcMain.handle('quit-app', async () => {
+  try {
+    cleanupProcesses();
+    app.quit();
+    return { success: true };
+  } catch (error) {
+    console.error('Error quitting app:', error);
+    return { success: false, error: error.message };
+  }
+});
 ipcMain.handle('check-sdk', async () => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const status = await sdkManager.checkSDK(sdkPath);
     return status;
   } catch (error) {
@@ -124,7 +187,7 @@ ipcMain.handle('check-sdk', async () => {
 
 ipcMain.handle('download-sdk', async (event) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     
     // Send progress updates
     const onProgress = (progress) => {
@@ -141,7 +204,7 @@ ipcMain.handle('download-sdk', async (event) => {
 
 ipcMain.handle('get-devices', async () => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const devices = await adbManager.getDevices(sdkPath);
     return devices;
   } catch (error) {
@@ -152,7 +215,7 @@ ipcMain.handle('get-devices', async () => {
 
 ipcMain.handle('get-device-info', async (event, deviceId) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const info = await adbManager.getDeviceInfo(sdkPath, deviceId);
     return info;
   } catch (error) {
@@ -163,7 +226,7 @@ ipcMain.handle('get-device-info', async (event, deviceId) => {
 
 ipcMain.handle('reboot-device', async (event, deviceId, mode) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.rebootDevice(sdkPath, deviceId, mode);
     return result;
   } catch (error) {
@@ -175,7 +238,7 @@ ipcMain.handle('reboot-device', async (event, deviceId, mode) => {
 ipcMain.handle('take-screenshot', async (event, deviceId) => {
   try {
     const { dialog } = require('electron');
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     
     // Show save dialog
     const { filePath } = await dialog.showSaveDialog(mainWindow, {
@@ -198,7 +261,7 @@ ipcMain.handle('take-screenshot', async (event, deviceId) => {
 
 ipcMain.handle('get-installed-apps', async (event, deviceId, includeSystem) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.getInstalledApps(sdkPath, deviceId, includeSystem);
     return result;
   } catch (error) {
@@ -210,7 +273,7 @@ ipcMain.handle('get-installed-apps', async (event, deviceId, includeSystem) => {
 ipcMain.handle('install-app', async (event, deviceId) => {
   try {
     const { dialog } = require('electron');
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     
     // Show open dialog for APK file
     const { filePaths } = await dialog.showOpenDialog(mainWindow, {
@@ -233,7 +296,7 @@ ipcMain.handle('install-app', async (event, deviceId) => {
 
 ipcMain.handle('uninstall-app', async (event, deviceId, packageName) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.uninstallApp(sdkPath, deviceId, packageName);
     return result;
   } catch (error) {
@@ -244,7 +307,7 @@ ipcMain.handle('uninstall-app', async (event, deviceId, packageName) => {
 
 ipcMain.handle('clear-app-data', async (event, deviceId, packageName) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.clearAppData(sdkPath, deviceId, packageName);
     return result;
   } catch (error) {
@@ -255,7 +318,7 @@ ipcMain.handle('clear-app-data', async (event, deviceId, packageName) => {
 
 ipcMain.handle('force-stop-app', async (event, deviceId, packageName) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.forceStopApp(sdkPath, deviceId, packageName);
     return result;
   } catch (error) {
@@ -267,7 +330,7 @@ ipcMain.handle('force-stop-app', async (event, deviceId, packageName) => {
 // Tools Tab Handlers
 ipcMain.handle('execute-shell-command', async (event, deviceId, command) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.executeShellCommand(sdkPath, deviceId, command);
     return result;
   } catch (error) {
@@ -284,7 +347,7 @@ ipcMain.handle('start-logcat', async (event, deviceId, filters) => {
       logcatProcess = null;
     }
 
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.startLogcat(sdkPath, deviceId, filters);
     
     if (!result.success) {
@@ -360,7 +423,7 @@ ipcMain.handle('stop-logcat', async () => {
 
 ipcMain.handle('clear-logcat', async (event, deviceId) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.clearLogcat(sdkPath, deviceId);
     return result;
   } catch (error) {
@@ -372,7 +435,7 @@ ipcMain.handle('clear-logcat', async (event, deviceId) => {
 ipcMain.handle('push-file', async (event, deviceId, remotePath) => {
   try {
     const { dialog } = require('electron');
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     
     const { filePaths } = await dialog.showOpenDialog(mainWindow, {
       title: 'Select File to Push',
@@ -394,7 +457,7 @@ ipcMain.handle('push-file', async (event, deviceId, remotePath) => {
 ipcMain.handle('pull-file', async (event, deviceId, remotePath) => {
   try {
     const { dialog } = require('electron');
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     
     const { filePath } = await dialog.showSaveDialog(mainWindow, {
       title: 'Save File As',
@@ -415,7 +478,7 @@ ipcMain.handle('pull-file', async (event, deviceId, remotePath) => {
 
 ipcMain.handle('start-screen-recording', async (event, deviceId, options) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.startScreenRecording(sdkPath, deviceId, options);
     return result;
   } catch (error) {
@@ -427,7 +490,7 @@ ipcMain.handle('start-screen-recording', async (event, deviceId, options) => {
 ipcMain.handle('stop-screen-recording', async (event, deviceId, remotePath) => {
   try {
     const { dialog } = require('electron');
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     
     const { filePath } = await dialog.showSaveDialog(mainWindow, {
       title: 'Save Recording As',
@@ -449,7 +512,7 @@ ipcMain.handle('stop-screen-recording', async (event, deviceId, remotePath) => {
 
 ipcMain.handle('send-key-event', async (event, deviceId, keyCode) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.sendKeyEvent(sdkPath, deviceId, keyCode);
     return result;
   } catch (error) {
@@ -460,7 +523,7 @@ ipcMain.handle('send-key-event', async (event, deviceId, keyCode) => {
 
 ipcMain.handle('send-text', async (event, deviceId, text) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.sendText(sdkPath, deviceId, text);
     return result;
   } catch (error) {
@@ -471,7 +534,7 @@ ipcMain.handle('send-text', async (event, deviceId, text) => {
 
 ipcMain.handle('send-tap', async (event, deviceId, x, y) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.sendTap(sdkPath, deviceId, x, y);
     return result;
   } catch (error) {
@@ -482,7 +545,7 @@ ipcMain.handle('send-tap', async (event, deviceId, x, y) => {
 
 ipcMain.handle('send-swipe', async (event, deviceId, x1, y1, x2, y2, duration) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.sendSwipe(sdkPath, deviceId, x1, y1, x2, y2, duration);
     return result;
   } catch (error) {
@@ -493,7 +556,7 @@ ipcMain.handle('send-swipe', async (event, deviceId, x1, y1, x2, y2, duration) =
 
 ipcMain.handle('connect-wireless', async (event, deviceId, port) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.connectWireless(sdkPath, deviceId, port);
     return result;
   } catch (error) {
@@ -504,7 +567,7 @@ ipcMain.handle('connect-wireless', async (event, deviceId, port) => {
 
 ipcMain.handle('disconnect-wireless', async (event, ipAddress) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.disconnectWireless(sdkPath, ipAddress);
     return result;
   } catch (error) {
@@ -516,7 +579,7 @@ ipcMain.handle('disconnect-wireless', async (event, ipAddress) => {
 ipcMain.handle('create-backup', async (event, deviceId, options) => {
   try {
     const { dialog } = require('electron');
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     
     const { filePath } = await dialog.showSaveDialog(mainWindow, {
       title: 'Save Backup As',
@@ -539,7 +602,7 @@ ipcMain.handle('create-backup', async (event, deviceId, options) => {
 ipcMain.handle('restore-backup', async (event, deviceId) => {
   try {
     const { dialog } = require('electron');
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     
     const { filePaths } = await dialog.showOpenDialog(mainWindow, {
       title: 'Select Backup File',
@@ -561,7 +624,7 @@ ipcMain.handle('restore-backup', async (event, deviceId) => {
 
 ipcMain.handle('get-system-info', async (event, deviceId, service) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.getSystemInfo(sdkPath, deviceId, service);
     return result;
   } catch (error) {
@@ -572,7 +635,7 @@ ipcMain.handle('get-system-info', async (event, deviceId, service) => {
 
 ipcMain.handle('list-processes', async (event, deviceId) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.listProcesses(sdkPath, deviceId);
     return result;
   } catch (error) {
@@ -584,7 +647,7 @@ ipcMain.handle('list-processes', async (event, deviceId) => {
 // File Manager Handlers
 ipcMain.handle('list-directory', async (event, deviceId, dirPath) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.listDirectory(sdkPath, deviceId, dirPath);
     return result;
   } catch (error) {
@@ -595,7 +658,7 @@ ipcMain.handle('list-directory', async (event, deviceId, dirPath) => {
 
 ipcMain.handle('delete-file', async (event, deviceId, filePath) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.deleteFile(sdkPath, deviceId, filePath);
     return result;
   } catch (error) {
@@ -606,7 +669,7 @@ ipcMain.handle('delete-file', async (event, deviceId, filePath) => {
 
 ipcMain.handle('create-directory', async (event, deviceId, dirPath) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.createDirectory(sdkPath, deviceId, dirPath);
     return result;
   } catch (error) {
@@ -617,7 +680,7 @@ ipcMain.handle('create-directory', async (event, deviceId, dirPath) => {
 
 ipcMain.handle('rename-file', async (event, deviceId, oldPath, newPath) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.renameFile(sdkPath, deviceId, oldPath, newPath);
     return result;
   } catch (error) {
@@ -628,7 +691,7 @@ ipcMain.handle('rename-file', async (event, deviceId, oldPath, newPath) => {
 
 ipcMain.handle('search-files', async (event, deviceId, searchPath, pattern) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.searchFiles(sdkPath, deviceId, searchPath, pattern);
     return result;
   } catch (error) {
@@ -639,7 +702,7 @@ ipcMain.handle('search-files', async (event, deviceId, searchPath, pattern) => {
 
 ipcMain.handle('push-file-path', async (event, deviceId, localPath, remotePath) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.pushFile(sdkPath, deviceId, localPath, remotePath);
     return result;
   } catch (error) {
@@ -651,7 +714,7 @@ ipcMain.handle('push-file-path', async (event, deviceId, localPath, remotePath) 
 // Connection Management Handlers
 ipcMain.handle('pair-wireless-device', async (event, ip, port, pairingCode) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.pairWirelessDevice(sdkPath, ip, port, pairingCode);
     return result;
   } catch (error) {
@@ -662,7 +725,7 @@ ipcMain.handle('pair-wireless-device', async (event, ip, port, pairingCode) => {
 
 ipcMain.handle('connect-wireless-ip', async (event, ip, port) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.connectWirelessIP(sdkPath, ip, port);
     return result;
   } catch (error) {
@@ -673,7 +736,7 @@ ipcMain.handle('connect-wireless-ip', async (event, ip, port) => {
 
 ipcMain.handle('disconnect-device', async (event, deviceId) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.disconnectDevice(sdkPath, deviceId);
     return result;
   } catch (error) {
@@ -684,7 +747,7 @@ ipcMain.handle('disconnect-device', async (event, deviceId) => {
 
 ipcMain.handle('restart-adb-server', async (event) => {
   try {
-    const sdkPath = path.join(app.getAppPath(), 'android-sdk');
+    const sdkPath = getSDKPath();
     const result = await adbManager.restartAdbServer(sdkPath);
     return result;
   } catch (error) {

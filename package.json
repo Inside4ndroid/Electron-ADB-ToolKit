@@ -49,8 +49,34 @@
     "win": {
       "icon": "src/images/adb_logo.png",
       "target": [
-        "nsis"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "perMachine": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Electron ADB Toolkit",
+      "license": "LICENSE",
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "menuCategory": "Development",
+      "displayLanguageSelector": false,
+      "installerLanguages": [
+        "en_US"
+      ],
+      "include": "build/installer.nsh",
+      "warningsAsErrors": false,
+      "guid": "a1b2c3d4-5e6f-7a8b-9c0d-1e2f3a4b5c6d"
     },
     "mac": {
       "icon": "src/images/adb_logo.png",
